@@ -1,0 +1,17 @@
+https://reactbits.dev/text-animations/circular-text
+npx shadcn@latest add @react-bits/CircularText-JS-CSS
+
+https://reactbits.dev/animations/animated-content
+npx shadcn@latest add @react-bits/AnimatedContent-JS-CSS
+
+https://reactbits.dev/micro/slide-commit
+npx shadcn@latest add @react-bits/SlideCommit-JS-CSS
+
+https://kokonutui.com/docs/cards/card-stack
+npx shadcn@latest add @kokonutui/card-stack
+
+https://kokonutui.com/docs/navigation/status-island
+npx shadcn@latest add @kokonutui/status-island
+
+https://kokonutui.com/docs/buttons/cart-button
+npx shadcn@latest add @kokonutui/cart-button
