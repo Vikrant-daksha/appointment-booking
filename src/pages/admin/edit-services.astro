@@ -1,0 +1,11 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { EditServices } from "../../components/EditServices.tsx";
+---
+
+<Layout>
+  <div class="pt-20 min-h-screen bg-neutral-50/50">
+    <EditServices client:only />
+  </div>
+</Layout>
+

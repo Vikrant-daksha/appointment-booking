@@ -15,3 +15,9 @@ npx shadcn@latest add @kokonutui/status-island
 
 https://kokonutui.com/docs/buttons/cart-button
 npx shadcn@latest add @kokonutui/cart-button
+
+Image Upload ui
+features selection
+service down
+service Edit
+mail

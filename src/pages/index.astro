@@ -1,11 +1,20 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+import Hero from '../components/Hero.tsx';
+import MyWork from '../components/MyWork.tsx';
+import CustomerReview from '../components/CustomerReview.tsx';
+import InstagramSection from '../components/InstagramSection.tsx';
+import YoutubeSection from '../components/YoutubeSection.tsx';
+import AboutMe from '../components/AboutMe.tsx';
+import BookingDrawer from '../components/booking/BookingDrawer.tsx';
 ---
 
 <Layout>
-	<Welcome />
+	<Hero client:visible />
+	<MyWork client:visible />
+	<CustomerReview client:visible />
+	<InstagramSection client:visible />
+	<YoutubeSection client:load />
+	<AboutMe client:visible />
+	<BookingDrawer client:load />
 </Layout>

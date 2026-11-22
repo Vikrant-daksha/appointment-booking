@@ -1,0 +1,10 @@
+---
+import Layout from '../layouts/Layout.astro';
+import StudioOverview from '../components/booking/StudioOverview.tsx';
+import BookingDrawer from '../components/booking/BookingDrawer.tsx';
+---
+
+<Layout>
+  <StudioOverview client:load />
+  <BookingDrawer client:load />
+</Layout>
