@@ -16,8 +16,8 @@ export default function CustomerReview() {
           <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-4">
             Customer Reviews
           </h2>
-          <p className="text-md text-muted-foreground">
-            what our clients are say about us
+          <p className="text-base text-muted-foreground">
+            Client feedback and ratings for our nail art studio services and appointment booking in Jaipur, India.
           </p>
         </div>
         <div className="grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
@@ -27,7 +27,7 @@ export default function CustomerReview() {
               front={
                 <img
                   src={imgSrc(src)}
-                  alt={`Review ${i + 1}`}
+                  alt={`Cherrybrush Jaipur customer nail review ${i + 1}`}
                   className="w-full h-full object-cover"
                   loading="lazy"
                   draggable={false}

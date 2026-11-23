@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import type { ServiceFeature } from "../../types/booking.ts";
+import { useCart, MAX_CART_LIMIT } from "../../context/CartContext.tsx";
 import type { CartItem, CartOption } from "../../context/CartContext.tsx";
 import { Check, Minus, Plus, X } from "lucide-react";
 
@@ -38,7 +39,18 @@ export function FeatureSelectionModal({
   onClose: () => void;
   onAddToCart: (configuredItem: CartItem) => void;
 }) {
-  const [qty, setQty] = useState(1);
+  const { totalCount, getItemQty } = useCart();
+  const currentItemQty = getItemQty(service.id);
+  const maxAllowedQty = Math.max(
+    0,
+    Math.min(
+      MAX_CART_LIMIT,
+      MAX_CART_LIMIT - totalCount,
+      MAX_CART_LIMIT - currentItemQty
+    )
+  );
+
+  const [qty, setQty] = useState(() => (maxAllowedQty > 0 ? 1 : 0));
 
   // Initialize selections with required single-choice defaults if present
   const [selectedOptions, setSelectedOptions] = useState<Record<string, ServiceFeature[]>>(() => {
@@ -187,7 +199,7 @@ export function FeatureSelectionModal({
                 {service.name}
               </h3>
               <p className="text-[11px] sm:text-xs text-[#71717A] mt-0.5">
-                Base Investment: ₹{service.price}{" "}
+                Base Price: ₹{service.price}{" "}
                 {service.time ? `• ${service.time}` : ""}
               </p>
             </div>
@@ -310,8 +322,8 @@ export function FeatureSelectionModal({
               </span>
               <button
                 type="button"
-                onClick={() => setQty((q) => Math.min(10, q + 1))}
-                disabled={qty >= 10}
+                onClick={() => setQty((q) => Math.min(maxAllowedQty, q + 1))}
+                disabled={qty >= maxAllowedQty || maxAllowedQty === 0}
                 className="w-7 h-7 rounded-full bg-[#FFFFFF] border border-[#E4E4E7] flex items-center justify-center text-[#18181B] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#eaeaea] transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -333,10 +345,10 @@ export function FeatureSelectionModal({
 
           <button
             type="button"
-            disabled={!isValidationPassing}
+            disabled={!isValidationPassing || maxAllowedQty === 0 || qty < 1}
             onClick={handleConfirm}
             className={`px-4 sm:px-5 py-2.5 rounded-full text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm ${
-              isValidationPassing
+              isValidationPassing && maxAllowedQty > 0 && qty >= 1
                 ? "bg-[#333333] hover:bg-[#18181B] text-white active:scale-95 cursor-pointer"
                 : "bg-[#D4D4D8] text-[#71717A] cursor-not-allowed"
             }`}

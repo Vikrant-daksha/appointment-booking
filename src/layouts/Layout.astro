@@ -1,22 +1,134 @@
 ---
 import '../styles/global.css';
 import Navbar from '../components/Navbar.tsx';
+
+interface Props {
+	title?: string;
+	description?: string;
+	keywords?: string;
+	canonical?: string;
+}
+
+const {
+	title = "Cherrybrush |  Booking Service - Nail Art Studio in Jaipur",
+	description = "Cherrybrush | Booking Service is Jaipur's top nail art studio. Book appointments online for nail extensions, gel nail art, bridal nails, and nail services in Jaipur, Rajasthan, India.",
+	keywords = "nail art studio in jaipur, appointment booking for nails in jaipur, nail salon jaipur, nail extensions jaipur, nail art jaipur india, cherrybrush jaipur, book nail appointment jaipur, gel nail extensions jaipur",
+	canonical = Astro.url.href,
+} = Astro.props;
+
+const siteName = "Cherrybrush |  Booking Service";
+const locationName = "Jaipur, Rajasthan, India";
+
+// Schema.org LocalBusiness / NailSalon structured data for local Jaipur SEO
+const jsonLd = {
+	"@context": "https://schema.org",
+	"@type": ["NailSalon", "LocalBusiness"],
+	"name": "Cherrybrush |  Booking Service",
+	"image": "https://cherrybrush.com/logo.jpeg",
+	"alternateName": "Cherrybrush Nail Art Studio Jaipur",
+	"description": "Premier nail art studio in Jaipur, India offering appointment booking for nail extensions, gel nail art, and nail care services.",
+	"url": "https://cherrybrush.com",
+	"telephone": "+91-9876543210",
+	"priceRange": "₹₹",
+	"address": {
+		"@type": "PostalAddress",
+		"addressLocality": "Jaipur",
+		"addressRegion": "Rajasthan",
+		"addressCountry": "IN"
+	},
+	"geo": {
+		"@type": "GeoCoordinates",
+		"latitude": 26.9124,
+		"longitude": 75.7873
+	},
+	"areaServed": [
+		{
+			"@type": "City",
+			"name": "Jaipur"
+		},
+		{
+			"@type": "AdministrativeArea",
+			"name": "Rajasthan"
+		}
+	],
+	"openingHoursSpecification": [
+		{
+			"@type": "OpeningHoursSpecification",
+			"dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+			"opens": "10:00",
+			"closes": "19:00"
+		}
+	],
+	"makesOffer": [
+		{
+			"@type": "Offer",
+			"itemOffered": {
+				"@type": "Service",
+				"name": "Nail Art Studio Appointment in Jaipur",
+				"description": "Custom nail art, gel extensions, overlay, and manicures in Jaipur."
+			}
+		},
+		{
+			"@type": "Offer",
+			"itemOffered": {
+				"@type": "Service",
+				"name": "Appointment Booking for Nails in Jaipur",
+				"description": "Instant online slot booking for professional nail services in Jaipur, India."
+			}
+		}
+	]
+};
 ---
 
 <!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/jpeg" href="/logo.jpeg" />
+		<link rel="apple-touch-icon" href="/logo.jpeg" />
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+
+		<!-- Primary Metadata & SEO -->
+		<title>{title}</title>
+		<meta name="title" content={title} />
+		<meta name="description" content={description} />
+		<meta name="keywords" content={keywords} />
+		<meta name="author" content="Cherrybrush |  Booking Service" />
+		<meta name="robots" content="index, follow" />
+		<link rel="canonical" href={canonical} />
+
+		<!-- Geographic SEO Tags for Jaipur, Rajasthan, India -->
+		<meta name="geo.region" content="IN-RJ" />
+		<meta name="geo.placename" content="Jaipur" />
+		<meta name="geo.position" content="26.9124;75.7873" />
+		<meta name="ICBM" content="26.9124, 75.7873" />
+
+		<!-- Open Graph / Social Media -->
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content={siteName} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:image" content="/logo.jpeg" />
+		<meta property="og:locale" content="en_IN" />
+
+		<!-- Twitter Meta Tags -->
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content="/logo.jpeg" />
+
+		<!-- Google Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 		<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
 		<script async src="https://apis.google.com/js/platform.js"></script>
+
+		<!-- Structured Data JSON-LD for Local Search Domination -->
+		<script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
 	</head>
 	<body>
 		<Navbar client:load />

@@ -3,6 +3,7 @@ import { apiFetch } from "../../lib/api.ts";
 import { zodEnv } from "../../lib/zodEnv.ts";
 import type { PublicShop, Service } from "../../types/booking.ts";
 import MyWork from "../MyWork.tsx";
+import { MapPin, ArrowUpRight, Phone, PhoneCall, Clock } from "lucide-react";
 
 export interface StudioScheduleItem {
   day: string;
@@ -155,7 +156,26 @@ export default function StudioOverview({
     });
   }, [services, selectedCategory]);
 
-  const heroImage = shop?.shopImages?.[0] || "";
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  const studioImages = useMemo(() => {
+    const raw = shop?.shopImages || [];
+    return raw.filter((img): img is string => typeof img === "string" && img.trim().length > 0);
+  }, [shop?.shopImages]);
+
+  // Reset active slide when images array changes
+  useEffect(() => {
+    setActiveSlide(0);
+  }, [studioImages.length]);
+
+  // Auto-advance fade carousel every 5s if multiple images are present (matches Hero slider pattern)
+  useEffect(() => {
+    if (studioImages.length <= 1) return;
+    const timer = setInterval(() => {
+      setActiveSlide((prev) => (prev + 1) % studioImages.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [studioImages.length]);
 
   if (isLoading) {
     return (
@@ -190,60 +210,83 @@ export default function StudioOverview({
           <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-stretch">
             {/* Studio Hero Visual Card */}
             <div className="w-full lg:w-7/12 relative overflow-hidden rounded-xl bg-surface-container min-h-[320px] sm:min-h-[420px] border border-border flex items-center justify-center">
-              {heroImage ? (
-                <img
-                  alt={`${shop?.shopName || ""} interior`}
-                  className="w-full h-full object-cover absolute inset-0"
-                  src={heroImage}
-                />
+              {studioImages.length > 0 ? (
+                studioImages.map((imgUrl, index) => (
+                  <img
+                    key={`${imgUrl}-${index}`}
+                    alt={`${shop?.shopName || "Studio"} interior ${index + 1}`}
+                    className={`w-full h-full object-cover absolute inset-0 transition-opacity duration-[1400ms] ease-in-out ${
+                      activeSlide === index
+                        ? "opacity-100 z-[1]"
+                        : "opacity-0 z-0 pointer-events-none"
+                    }`}
+                    src={imgUrl}
+                    loading={index === 0 ? "eager" : "lazy"}
+                  />
+                ))
               ) : null}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+
+              {/* Multiple images indicator pills */}
+              {studioImages.length > 1 && (
+                <div className="absolute top-4 right-4 z-[4] flex items-center gap-1.5 bg-black/40 backdrop-blur-xs px-2.5 py-1 rounded-full">
+                  {studioImages.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveSlide(idx)}
+                      aria-label={`Go to image slide ${idx + 1}`}
+                      className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                        activeSlide === idx
+                          ? "bg-white w-4"
+                          : "bg-white/40 hover:bg-white/75 w-1.5"
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent z-[2]"></div>
 
               {/* Badges on Image */}
-              <div className="absolute bottom-4 left-4 right-4 text-white">
-                {shop?.shopName ? (
-                  <h1 className="font-headline text-2xl sm:text-3xl lg:text-4xl text-white font-normal drop-shadow-sm">
-                    {shop.shopName}
-                  </h1>
-                ) : null}
+              <div className="absolute bottom-4 left-4 right-4 text-white z-[3]">
+                <h1 className="font-headline text-2xl sm:text-3xl lg:text-4xl text-white font-normal drop-shadow-sm">
+                  {shop?.shopName || "Cherrybrush |  Booking Service"}
+                </h1>
+                <p className="text-xs sm:text-sm text-white/90 drop-shadow-xs mt-1">
+                  Nail Art Studio in Jaipur, India
+                </p>
               </div>
             </div>
 
             {/* Studio Details & Weekly Schedule Panel */}
             <div className="w-full lg:w-5/12 flex flex-col justify-between space-y-4">
               {/* Location Block */}
-              {shop?.location ? (
-                <div className="bg-white rounded-xl p-4 border border-border">
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-full bg-surface flex items-center justify-center shrink-0 border border-border text-[#333333] shadow-xs">
-                      <span className="material-symbols-outlined text-[18px]">
-                        location_on
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold block mb-0.5">
-                        Location
-                      </span>
-                      <p className="text-sm font-medium text-foreground leading-snug">
-                        {shop.location}
-                      </p>
-                      <a
-                        className="inline-flex items-center gap-1 mt-1.5 text-xs text-[#333333] font-medium hover:underline"
-                        href={`https://maps.google.com/?q=${encodeURIComponent(
-                          shop.location,
-                        )}`}
-                        rel="noopener noreferrer"
-                        target="_blank"
-                      >
-                        <span>Directions</span>
-                        <span className="material-symbols-outlined text-[14px]">
-                          arrow_outward
-                        </span>
-                      </a>
-                    </div>
+              <div className="bg-white rounded-xl p-4 border border-border">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-full bg-surface flex items-center justify-center shrink-0 border border-border text-[#333333] shadow-xs">
+                    <MapPin className="w-4 h-4 text-[#333333]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold block mb-0.5">
+                      Location
+                    </span>
+                    <p className="text-sm font-medium text-foreground leading-snug">
+                      {shop?.location || "Jaipur, Rajasthan, India"}
+                    </p>
+                    <a
+                      className="inline-flex items-center gap-1 mt-1.5 text-xs text-[#333333] font-medium hover:underline"
+                      href={`https://maps.google.com/?q=${encodeURIComponent(
+                        shop?.location || "Nail Art Studio Jaipur Rajasthan India"
+                      )}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      <span>Directions</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </a>
                   </div>
                 </div>
-              ) : null}
+              </div>
 
               {/* Phone Contact Block */}
               {shop?.phone ? (
@@ -251,9 +294,7 @@ export default function StudioOverview({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-surface flex items-center justify-center shrink-0 border border-border text-[#333333] shadow-xs">
-                        <span className="material-symbols-outlined text-[18px]">
-                          call
-                        </span>
+                        <Phone className="w-4 h-4 text-[#333333]" />
                       </div>
                       <div>
                         <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold block mb-0.5">
@@ -269,12 +310,10 @@ export default function StudioOverview({
                     </div>
                     <a
                       aria-label="Call Studio"
-                      className="inline-flex items-center justify-center w-8 h-8 p-3 rounded-full bg-[#333333] text-white hover:bg-black transition-colors"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#333333] text-white hover:bg-black transition-colors"
                       href={`tel:${shop.phone}`}
                     >
-                      <span className="material-symbols-outlined text-[16px]">
-                        phone
-                      </span>
+                      <PhoneCall className="w-4 h-4" />
                     </a>
                   </div>
                 </div>
@@ -285,9 +324,7 @@ export default function StudioOverview({
                 <div className="bg-white rounded-xl p-4 border border-border flex-grow">
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-border/80">
                     <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px] text-muted-foreground">
-                        schedule
-                      </span>
+                      <Clock className="w-4 h-4 text-muted-foreground" />
                       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
                         Opening Hours
                       </span>
@@ -329,7 +366,7 @@ export default function StudioOverview({
           {shop?.shopImages && shop.shopImages.length > 1 && (
             <div className="mt-6 pt-6 border-t border-border">
               <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold block mb-3">
-                Sanctuary Gallery
+                Studio Gallery
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {shop.shopImages.slice(1, 5).map((imgUrl, idx) => (

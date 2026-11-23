@@ -3,7 +3,7 @@ import { CartProvider, useCart } from "../../context/CartContext.tsx";
 import { apiFetch } from "../../lib/api.ts";
 import { zodEnv } from "../../lib/zodEnv.ts";
 import type { PublicShop } from "../../types/booking.ts";
-import { ArrowRight, ShoppingBag } from "lucide-react";
+import { ArrowRight, ShoppingBag, Trash2, X } from "lucide-react";
 
 export interface BookingDrawerProps {
   initialShopName?: string;
@@ -67,15 +67,13 @@ function BookingDrawerContent({
         className="fixed bottom-6 inset-x-0 mx-auto max-w-[880px] px-4 sm:px-6 z-40 transition-transform duration-300 translate-y-0"
       >
         <div className="rounded-full p-2.5 sm:p-3 shadow-lg flex items-center justify-between gap-4 backdrop-blur-md bg-[#FFFFFF] border border-[#E4E4E7]">
-          <div
-            onClick={() => setIsModalOpen(true)}
+          <a
+            href="/book/cart"
             className="flex items-center gap-3 pl-2 sm:pl-3 min-w-0 cursor-pointer hover:opacity-90 transition-opacity"
-            title="Click to review itinerary"
+            title="View cart"
           >
             <div className="relative flex items-center justify-center w-10 h-10 rounded-full shrink-0 bg-[#F4F4F5] border border-[#E4E4E7]">
-              <span className="material-symbols-outlined text-[20px] text-[#1b1b1e]">
-                <ShoppingBag className="w-4" />
-              </span>
+              <ShoppingBag className="w-4 h-4 text-[#1b1b1e]" />
               <span
                 id="drawer-badge"
                 className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-semibold text-[#ffffff] bg-[#333333]"
@@ -96,7 +94,7 @@ function BookingDrawerContent({
                 <span id="drawer-duration">{totalMinutes} mins total</span>
               </p>
             </div>
-          </div>
+          </a>
 
           <div className="flex items-center gap-3 sm:gap-4 shrink-0 pr-1">
             <div className="text-right">
@@ -123,9 +121,7 @@ function BookingDrawerContent({
               className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-[#ffffff] text-xs font-medium tracking-wide transition-colors shadow-sm bg-[#333333] hover:bg-[#1e1e1e]"
             >
               <span>Book</span>
-              <span className="material-symbols-outlined text-[15px]">
-                <ArrowRight className="w-4" />
-              </span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -156,9 +152,7 @@ function BookingDrawerContent({
                 onClick={() => setIsModalOpen(false)}
                 className="w-8 h-8 rounded-full bg-[#F4F4F5] border border-[#E4E4E7] flex items-center justify-center text-[#1b1b1e] hover:bg-[#E4E4E7] transition-colors"
               >
-                <span className="material-symbols-outlined text-[18px]">
-                  close
-                </span>
+                <X className="w-4 h-4 text-[#1b1b1e]" />
               </button>
             </div>
 
@@ -204,9 +198,7 @@ function BookingDrawerContent({
                       className="text-[#747878] hover:text-[#ba1a1a] transition-colors p-1"
                       title="Remove item"
                     >
-                      <span className="material-symbols-outlined text-[18px]">
-                        delete
-                      </span>
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))
@@ -225,7 +217,7 @@ function BookingDrawerContent({
               </div>
 
               <div className="pt-4 border-t border-[#E4E4E7] flex justify-between text-sm font-medium text-[#1b1b1e]">
-                <span>Total Investment</span>
+                <span>Total Amount</span>
                 <span id="modal-total" className="font-semibold text-base">
                   ₹{totalAmount}
                 </span>

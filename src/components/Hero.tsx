@@ -19,18 +19,19 @@ export default function Hero() {
     <section
       className="h-[100dvh] md:h-7/8 w-full relative overflow-hidden flex flex-col justify-end"
       style={{ backgroundColor: "#FFF5F5" }}
+      aria-label="Hero Section"
     >
       <div className="slider absolute inset-0 z-0 overflow-hidden">
         <img
           src={imgSrc(hero1)}
-          alt=""
+          alt="Nail Art Studio services in Jaipur"
           className={`slide absolute inset-0 w-full h-full object-cover transition-opacity duration-[1600ms] ease-in-out ${activeSlide === 0 ? "opacity-100 z-1" : "opacity-0"}`}
           loading="eager"
           decoding="async"
         />
         <img
           src={imgSrc(hero2)}
-          alt=""
+          alt="Professional nail care appointment booking Jaipur"
           className={`slide absolute inset-0 w-full h-full object-cover transition-opacity duration-[1600ms] ease-in-out ${activeSlide === 1 ? "opacity-100 z-1" : "opacity-0"}`}
           loading="eager"
           decoding="async"
@@ -40,29 +41,36 @@ export default function Hero() {
       </div>
 
       <div className="relative z-10 w-full px-6 pb-14">
-        <div className="max-w-xl flex flex-col gap-6 items-start text-left">
-          <a href="/" className="inline-block">
-            <img src={imgSrc(logo)} alt="Brand logo" className="h-16 w-auto" />
+        <div className="max-w-xl flex flex-col gap-5 items-start text-left">
+          {/* Site Logo */}
+          <a href="/" className="inline-block" aria-label="Cherrybrush |  Booking Service">
+            <img
+              src={imgSrc(logo)}
+              alt="Cherrybrush |  Booking Service"
+              className="h-16 w-auto rounded-sm block object-contain"
+            />
           </a>
+
+          {/* Primary High-Ranking SEO Heading */}
           <h1
-            className="text-3xl md:text-5xl font-bold tracking-tight"
+            className="text-3xl md:text-5xl font-bold tracking-tight text-[#222222]"
             style={{
-              color: "#333333",
               textShadow: "0 2px 4px rgba(0,0,0,0.08)",
             }}
           >
-            Look your best, every day.
+            Nail Art Studio in Jaipur
           </h1>
+
           <p
-            className="text-lg max-w-md"
+            className="text-base sm:text-lg max-w-lg text-[#333333] font-medium leading-relaxed"
             style={{
-              color: "#333333",
               textShadow: "0 1px 2px rgba(0,0,0,0.06)",
             }}
           >
-            Professional care tailored to you. Book your appointment and get
-            started.
+            Appointment booking & professional nail services in Jaipur, India.
+            Get custom nail art, gel extensions, and complete nail care.
           </p>
+
           <Button className="w-full sm:w-64" onClick={() => (window.location.href = "/book")}>
             Book Appointment
           </Button>

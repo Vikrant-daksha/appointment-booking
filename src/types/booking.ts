@@ -131,3 +131,55 @@ export interface ApiResponse<T = unknown> {
   message?: string;
   [key: string]: any;
 }
+
+// =========================================================================
+// 5. BOOKING CREATION & CONFIRMATION TYPES (BackendSpec.md C.8)
+// =========================================================================
+
+export type BookingStatus = "CONFIRMED" | "CANCELLED" | "COMPLETED";
+
+export interface SelectedOption {
+  featureName: string;
+  price: string;
+  additive: boolean;
+}
+
+export interface BookingCartItem {
+  serviceId: string; // References Service._id / id
+  serviceName: string;
+  selectedOptions: SelectedOption[];
+  totalPrice: number;
+}
+
+export interface Booking {
+  _id?: string;
+  id?: string;
+  customerName: string;
+  customerEmail?: string;
+  customerPhone: string;
+  shopId: string;
+  date: string; // "YYYY-MM-DD"
+  timeSlot: string; // e.g. "11:30 AM"
+  cart: BookingCartItem[];
+  notes?: string;
+  status: BookingStatus;
+  createdAt?: string;
+  deleted?: boolean;
+}
+
+export interface BookingCreateRequest {
+  customerName: string;
+  customerEmail?: string;
+  customerPhone: string;
+  shopId: string;
+  date: string; // "YYYY-MM-DD"
+  timeSlot: string;
+  cart: BookingCartItem[];
+  notes?: string;
+}
+
+export interface BookingCreateResponse {
+  success: boolean;
+  message?: string;
+  booking?: Booking;
+}

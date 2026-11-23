@@ -1,0 +1,10 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import CustomerBookings from "../../components/CustomerBookings.tsx";
+---
+
+<Layout title="Customer Bookings | Cherrybrush |  Booking Service">
+  <div class="pt-20 min-h-screen bg-neutral-50/50">
+    <CustomerBookings client:only="react" />
+  </div>
+</Layout>

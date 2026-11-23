@@ -1,0 +1,11 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CartPage from '../../components/booking/CartPage.tsx';
+---
+
+<Layout
+  title="Booking Summary & Cart | Cherrybrush |  Booking Service Jaipur"
+  description="Review your selected nail services and proceed to appointment booking at Cherrybrush Jaipur."
+>
+  <CartPage client:load />
+</Layout>

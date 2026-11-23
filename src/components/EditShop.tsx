@@ -10,6 +10,10 @@ import { apiFetch, getStoredAdminInfo } from "../lib/api.ts";
 import { zodEnv } from "../lib/zodEnv.ts";
 import type { PublicShop } from "../types/booking.ts";
 import {
+  SortableImageGrid,
+  type SortableImageItem,
+} from "./ui/SortableImageGrid.tsx";
+import {
   Store,
   Clock,
   MapPin,
@@ -69,14 +73,12 @@ function EditShopInner() {
 
   // Local Form State
   const [formData, setFormData] = useState<ShopFormData>({
-    shopName: "",
+    shopName: "Cherrybrush |  Booking Service",
     phone: "",
-    location: "",
+    location: "Jaipur, Rajasthan, India",
     openingTimings: { ...DEFAULT_TIMINGS },
   });
-  const [existingImages, setExistingImages] = useState<string[]>([]);
-  const [newFiles, setNewFiles] = useState<File[]>([]);
-  const [filePreviews, setFilePreviews] = useState<string[]>([]);
+  const [stagedImages, setStagedImages] = useState<SortableImageItem[]>([]);
 
   // Feedback State
   const [successMessage, setSuccessMessage] = useState("");
@@ -116,33 +118,37 @@ function EditShopInner() {
   useEffect(() => {
     if (shop) {
       setFormData({
-        shopName: shop.shopName || "",
+        shopName: shop.shopName || "Cherrybrush |  Booking Service",
         phone: shop.phone || "",
-        location: shop.location || "",
+        location: shop.location || "Jaipur, Rajasthan, India",
         openingTimings: {
           ...DEFAULT_TIMINGS,
           ...(shop.openingTimings || {}),
         },
       });
-      setExistingImages(shop.shopImages || []);
+      const initialImages: SortableImageItem[] = (shop.shopImages || []).map(
+        (url, i) => ({
+          id: `shop-existing-${url}-${i}`,
+          url,
+          isExisting: true,
+          name: `Studio ${i + 1}`,
+        })
+      );
+      setStagedImages(initialImages);
     }
   }, [shop]);
-
-  // Generate object URL previews for newly staged files
-  useEffect(() => {
-    const urls = newFiles.map((file) => URL.createObjectURL(file));
-    setFilePreviews(urls);
-    return () => {
-      urls.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [newFiles]);
 
   // 2. Mutation for updating shop via PUT /admin/shop and invalidating ["shop"]
   const updateShopMutation = useMutation({
     mutationFn: async () => {
-      const hasNewImages = newFiles.length > 0;
+      const newFilesToUpload = stagedImages
+        .filter((it) => it.file && !it.isExisting)
+        .map((it) => it.file as File);
+      const retainedImages = stagedImages
+        .filter((it) => it.isExisting && it.url)
+        .map((it) => it.url);
 
-      if (hasNewImages) {
+      if (newFilesToUpload.length > 0) {
         // Multipart/form-data for uploading raw images directly to Cloudinary
         const fd = new FormData();
         fd.append("shopName", formData.shopName.trim());
@@ -150,13 +156,13 @@ function EditShopInner() {
         fd.append("location", formData.location.trim());
         fd.append("openingTimings", JSON.stringify(formData.openingTimings));
 
-        // Append retained existing Cloudinary images
-        existingImages.forEach((imgUrl) => {
+        // Append retained existing Cloudinary images in current reordered sequence
+        retainedImages.forEach((imgUrl) => {
           fd.append("shopImages", imgUrl);
         });
 
-        // Append new image files (field 'images' per BackendSpec)
-        newFiles.forEach((file) => {
+        // Append new image files in current reordered sequence (field 'images' per BackendSpec)
+        newFilesToUpload.forEach((file) => {
           fd.append("images", file);
         });
 
@@ -180,7 +186,7 @@ function EditShopInner() {
             phone: formData.phone.trim(),
             location: formData.location.trim(),
             openingTimings: formData.openingTimings,
-            shopImages: existingImages,
+            shopImages: retainedImages,
           }),
         });
 
@@ -197,7 +203,6 @@ function EditShopInner() {
       queryClient.invalidateQueries({ queryKey: ["shop"] });
       queryClient.invalidateQueries({ queryKey: ["adminShop"] });
 
-      setNewFiles([]);
       setSuccessMessage("Shop profile and operating hours updated successfully!");
       setErrorMessage("");
       setTimeout(() => setSuccessMessage(""), 5000);
@@ -265,39 +270,60 @@ function EditShopInner() {
     if (!e.target.files?.length) return;
     const selected = Array.from(e.target.files);
 
-    // Limit to 10 files total
-    const totalCount = existingImages.length + newFiles.length + selected.length;
-    if (totalCount > 10) {
+    // Limit to 10 files total across gallery
+    if (stagedImages.length + selected.length > 10) {
       setErrorMessage("Maximum 10 showcase images allowed across gallery.");
       return;
     }
 
-    setNewFiles((prev) => [...prev, ...selected]);
+    const newItems: SortableImageItem[] = selected.map((file, i) => ({
+      id: `shop-new-${file.name}-${file.lastModified}-${Date.now()}-${i}`,
+      url: URL.createObjectURL(file),
+      file,
+      isExisting: false,
+      name: file.name,
+      size: file.size,
+    }));
+
+    setStagedImages((prev) => [...prev, ...newItems]);
     setErrorMessage("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removeExistingImage = (indexToRemove: number) => {
-    setExistingImages((prev) => prev.filter((_, i) => i !== indexToRemove));
-  };
-
-  const removeNewFile = (indexToRemove: number) => {
-    setNewFiles((prev) => prev.filter((_, i) => i !== indexToRemove));
+  const handleRemoveImage = (id: string) => {
+    setStagedImages((prev) => {
+      const item = prev.find((it) => it.id === id);
+      if (item && !item.isExisting && item.url) {
+        URL.revokeObjectURL(item.url);
+      }
+      return prev.filter((it) => it.id !== id);
+    });
   };
 
   const handleReset = () => {
     if (shop) {
       setFormData({
-        shopName: shop.shopName || "",
+        shopName: shop.shopName || "Cherrybrush |  Booking Service",
         phone: shop.phone || "",
-        location: shop.location || "",
+        location: shop.location || "Jaipur, Rajasthan, India",
         openingTimings: {
           ...DEFAULT_TIMINGS,
           ...(shop.openingTimings || {}),
         },
       });
-      setExistingImages(shop.shopImages || []);
-      setNewFiles([]);
+      // Revoke any temporary object URLs
+      stagedImages.forEach((it) => {
+        if (!it.isExisting && it.url) URL.revokeObjectURL(it.url);
+      });
+      const initialImages: SortableImageItem[] = (shop.shopImages || []).map(
+        (url, i) => ({
+          id: `shop-existing-${url}-${i}`,
+          url,
+          isExisting: true,
+          name: `Studio ${i + 1}`,
+        })
+      );
+      setStagedImages(initialImages);
       setErrorMessage("");
       setSuccessMessage("");
     }
@@ -627,7 +653,7 @@ function EditShopInner() {
                   </div>
                 </div>
                 <span className="text-[11px] font-semibold text-[#71717A] bg-[#F4F4F5] px-2.5 py-1 rounded-full border border-[#E4E4E7]">
-                  {existingImages.length + newFiles.length} / 10
+                  {stagedImages.length} / 10
                 </span>
               </div>
 
@@ -660,74 +686,24 @@ function EditShopInner() {
                 </label>
               </div>
 
-              {/* Newly Staged Previews */}
-              {newFiles.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>New Photos Staged to Upload ({newFiles.length})</span>
+              {/* Drag and Drop Sortable Showcase Gallery */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-[#18181B] flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-pink-600" />
+                    <span>Showcase Photos ({stagedImages.length})</span>
                   </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {newFiles.map((file, idx) => (
-                      <div
-                        key={idx}
-                        className="group relative aspect-square rounded-xl overflow-hidden border-2 border-emerald-500/80 bg-[#F4F4F5] shadow-xs"
-                      >
-                        <img
-                          src={filePreviews[idx]}
-                          alt={file.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeNewFile(idx)}
-                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-[#18181B]/80 text-white flex items-center justify-center hover:bg-rose-600 transition-colors"
-                          title="Remove staged photo"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                        <div className="absolute inset-x-0 bottom-0 bg-[#18181B]/75 p-1 text-[9px] text-white truncate text-center">
-                          {(file.size / (1024 * 1024)).toFixed(1)}MB
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <span className="text-[10px] text-[#71717A]">
+                    Drag to reorder • #1 is Cover Photo
+                  </span>
                 </div>
-              )}
 
-              {/* Existing Cloudinary Gallery */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-[#18181B]">
-                  Current Live Photos ({existingImages.length})
-                </p>
-                {existingImages.length === 0 ? (
-                  <div className="p-4 rounded-xl bg-[#FAFAFA] border border-[#E4E4E7] text-center text-xs text-[#71717A]">
-                    No showcase images found for this shop.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2">
-                    {existingImages.map((url, idx) => (
-                      <div
-                        key={idx}
-                        className="group relative aspect-square rounded-xl overflow-hidden border border-[#E4E4E7] bg-[#F4F4F5] shadow-2xs"
-                      >
-                        <img
-                          src={url}
-                          alt={`Shop image ${idx + 1}`}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeExistingImage(idx)}
-                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-[#18181B]/80 text-white flex items-center justify-center hover:bg-rose-600 transition-colors opacity-90 sm:opacity-0 group-hover:opacity-100"
-                          title="Delete photo"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <SortableImageGrid
+                  items={stagedImages}
+                  onReorder={setStagedImages}
+                  onRemove={handleRemoveImage}
+                  maxItems={10}
+                />
               </div>
             </div>
 
@@ -740,6 +716,18 @@ function EditShopInner() {
                 </h3>
               </div>
               <div className="bg-white rounded-2xl p-4 border border-rose-100/80 shadow-2xs space-y-2">
+                {stagedImages[0]?.url ? (
+                  <div className="relative aspect-video rounded-xl overflow-hidden border border-[#E4E4E7] mb-2 bg-[#F4F4F5]">
+                    <img
+                      src={stagedImages[0].url}
+                      alt="Cover Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-md bg-[#18181B]/80 text-[10px] font-semibold text-white tracking-wider uppercase backdrop-blur-xs">
+                      Cover Photo
+                    </span>
+                  </div>
+                ) : null}
                 {formData.shopName ? (
                   <p className="text-sm font-bold text-[#18181B]">
                     {formData.shopName}

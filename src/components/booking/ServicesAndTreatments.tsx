@@ -13,6 +13,7 @@ import {
 } from "./ServicesSkeleton.tsx";
 import {
   useCart,
+  MAX_CART_LIMIT,
   type CartItem,
   type CartOption,
 } from "../../context/CartContext.tsx";
@@ -79,7 +80,7 @@ export default function ServicesAndTreatments({
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [durationFilter, setDurationFilter] = useState<string>("all");
-  const { items: cart, addItem, getItemQty } = useCart();
+  const { items: cart, addItem, getItemQty, totalCount } = useCart();
   const [configuringService, setConfiguringService] =
     useState<ServiceItem | null>(null);
 
@@ -540,22 +541,35 @@ export default function ServicesAndTreatments({
                                           </div>
 
                                           {/* Add / Choose Options Button */}
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              handleServiceAddClick(service)
-                                            }
-                                            className="add-to-cart-btn inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium transition-all duration-150 active:scale-95 shadow-sm bg-[#333333] hover:bg-[#18181B] text-[#ffffff] cursor-pointer"
-                                          >
-                                            <Plus className="w-4 h-4" />
-                                            <span>
-                                              {serviceQty > 0
-                                                ? `Add (${serviceQty})`
-                                                : hasOptions
-                                                  ? "Choose Options"
-                                                  : "Add"}
-                                            </span>
-                                          </button>
+                                          {(() => {
+                                            const isMaxed =
+                                              serviceQty >= MAX_CART_LIMIT ||
+                                              totalCount >= MAX_CART_LIMIT;
+
+                                            return (
+                                              <button
+                                                type="button"
+                                                disabled={isMaxed}
+                                                onClick={() =>
+                                                  handleServiceAddClick(service)
+                                                }
+                                                className={`add-to-cart-btn inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium transition-all duration-150 shadow-sm ${
+                                                  isMaxed
+                                                    ? "bg-[#E4E4E7] text-[#71717A] cursor-not-allowed opacity-75"
+                                                    : "bg-[#333333] hover:bg-[#18181B] text-[#ffffff] cursor-pointer active:scale-95"
+                                                }`}
+                                              >
+                                                <Plus className="w-4 h-4" />
+                                                <span>
+                                                  {serviceQty > 0
+                                                    ? `Add (${serviceQty})`
+                                                    : hasOptions
+                                                      ? "Choose Options"
+                                                      : "Add"}
+                                                </span>
+                                              </button>
+                                            );
+                                          })()}
                                         </div>
                                       </div>
                                     </article>

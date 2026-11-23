@@ -6,7 +6,7 @@ import {
   MobileCategoryNavSkeleton,
   MobileServicesListSkeleton,
 } from "./ServicesSkeleton.tsx";
-import { useCart } from "../../context/CartContext.tsx";
+import { useCart, MAX_CART_LIMIT } from "../../context/CartContext.tsx";
 import BookingDrawer from "./BookingDrawer.tsx";
 import {
   FeatureSelectionModal,
@@ -63,7 +63,7 @@ export default function ServicesAndTreatmentsMobile({
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [durationFilter, setDurationFilter] = useState<string>("all");
-  const { items: cart, addItem, getItemQty } = useCart();
+  const { items: cart, addItem, getItemQty, totalCount } = useCart();
   const [configuringService, setConfiguringService] =
     useState<ServiceItem | null>(null);
 
@@ -408,10 +408,8 @@ export default function ServicesAndTreatmentsMobile({
                 {isLoading ? (
                   <MobileServicesListSkeleton />
                 ) : filteredServices.length === 0 ? (
-                  <div className="bg-white rounded-DEFAULT p-6 border border-[#E4E4E7] text-center space-y-2">
-                    <span className="material-symbols-outlined text-[32px] text-[#747878]">
-                      <SearchXIcon />
-                    </span>
+                  <div className="bg-white rounded-DEFAULT p-6 border border-[#E4E4E7] text-center space-y-2 flex flex-col items-center justify-center">
+                    <SearchXIcon className="w-8 h-8 text-[#747878]" />
                     <h3 className="font-headline text-base text-[#1b1b1e]">
                       No services found
                     </h3>
@@ -499,31 +497,42 @@ export default function ServicesAndTreatmentsMobile({
                                   <div className="pt-2 flex items-center justify-between border-t border-[#F4F4F5]">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className="inline-flex items-center gap-1 text-[10px] text-[#444748] bg-[#F4F4F5] border border-[#E4E4E7] px-2 py-0.5 rounded-full">
-                                        <span className="material-symbols-outlined text-[11px]">
-                                          <Clock className="w-3.5 h-3.5" />
-                                        </span>
+                                        <Clock className="w-3 h-3" />
                                         {service.time}
                                       </span>
                                     </div>
 
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleServiceAddClick(service)
-                                      }
-                                      className="add-to-cart-btn inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium transition-all duration-150 active:scale-95 shadow-sm bg-[#333333] hover:bg-[#1e1e1e] text-[#ffffff] cursor-pointer"
-                                    >
-                                      <span className="text-[13px]">
-                                        <Plus className="w-3.5 h-3.5" />
-                                      </span>
-                                      <span>
-                                        {serviceQty > 0
-                                          ? `Add (${serviceQty})`
-                                          : hasOptions
-                                            ? "Options"
-                                            : "Add"}
-                                      </span>
-                                    </button>
+                                    {(() => {
+                                      const isMaxed =
+                                        serviceQty >= MAX_CART_LIMIT ||
+                                        totalCount >= MAX_CART_LIMIT;
+
+                                      return (
+                                        <button
+                                          type="button"
+                                          disabled={isMaxed}
+                                          onClick={() =>
+                                            handleServiceAddClick(service)
+                                          }
+                                          className={`add-to-cart-btn inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium transition-all duration-150 shadow-sm ${
+                                            isMaxed
+                                              ? "bg-[#E4E4E7] text-[#71717A] cursor-not-allowed opacity-75"
+                                              : "bg-[#333333] hover:bg-[#1e1e1e] text-[#ffffff] cursor-pointer active:scale-95"
+                                          }`}
+                                        >
+                                          <span className="text-[13px]">
+                                            <Plus className="w-3.5 h-3.5" />
+                                          </span>
+                                          <span>
+                                            {serviceQty > 0
+                                              ? `Add (${serviceQty})`
+                                              : hasOptions
+                                                ? "Options"
+                                                : "Add"}
+                                          </span>
+                                        </button>
+                                      );
+                                    })()}
                                   </div>
                                 </article>
                               );

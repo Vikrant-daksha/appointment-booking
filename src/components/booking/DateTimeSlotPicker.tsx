@@ -1,15 +1,32 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery, QueryClientProvider } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { queryClient } from "../../lib/queryClient.ts";
 import { CartProvider, useCart } from "../../context/CartContext.tsx";
 import { apiFetch } from "../../lib/api.ts";
 import { zodEnv } from "../../lib/zodEnv.ts";
-import type { PublicShop } from "../../types/booking.ts";
+import type {
+  PublicShop,
+  BookingCreateRequest,
+  BookingCreateResponse,
+} from "../../types/booking.ts";
 import {
+  AlertCircle,
   ArrowLeft,
   CalendarCheck,
+  CalendarX,
   CheckCircle2,
+  ChevronDown,
+  Clock,
+  Lock,
+  Mail,
+  Phone,
   Plus,
+  Sparkles,
+  User,
   Verified,
 } from "lucide-react";
 import { Calendar } from "../ui/calendar.tsx";
@@ -29,6 +46,9 @@ export interface DateTimeSlotPickerProps {
     selectedSlot: string,
     selectedDate: string,
     selectedIsoDate?: string,
+    customerName?: string,
+    phoneNumber?: string,
+    customerEmail?: string,
   ) => void;
   onModifySelection?: () => void;
 }
@@ -157,8 +177,18 @@ function DateTimeSlotPickerContent({
   onContinue,
   onModifySelection,
 }: DateTimeSlotPickerProps) {
-  const { items: cartItems, totalAmount, totalMinutes, totalCount } = useCart();
+  const {
+    items: cartItems,
+    totalAmount,
+    totalMinutes,
+    totalCount,
+    clearCart,
+  } = useCart();
   const dateInputRef = useRef<HTMLInputElement>(null);
+
+  // Optional customer notes & booking error feedback
+  const [notes, setNotes] = useState<string>("");
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   // 1. Fetch Shop details to retrieve shopId and openingTimings
   const { data: shop, isLoading: isShopLoading } = useQuery<PublicShop>({
@@ -228,6 +258,17 @@ function DateTimeSlotPickerContent({
   );
   const [selectedSlot, setSelectedSlot] = useState<string>("11:00 AM");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  // Customer info state
+  const [customerName, setCustomerName] = useState<string>("");
+  const [customerEmail, setCustomerEmail] = useState<string>("");
+  const [phoneNumber, setPhoneNumber] = useState<string>("");
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  const isNameValid = customerName.trim().length >= 2;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim());
+  const isPhoneValid = /^[6-9]\d{9}$/.test(phoneNumber.trim());
+  const isCustomerInfoValid = isNameValid && isEmailValid && isPhoneValid;
 
   // Responsive width tracking for SlideCommit component
   const slideContainerRef = useRef<HTMLDivElement>(null);
@@ -344,6 +385,94 @@ function DateTimeSlotPickerContent({
     return `${minsTotal} Minutes`;
   }, [totalMinutes]);
 
+  // TanStack Query useMutation for POST /bookings/create (BackendSpec.md C.8)
+  const bookingMutation = useMutation<
+    BookingCreateResponse,
+    Error,
+    BookingCreateRequest
+  >({
+    mutationFn: async (payload: BookingCreateRequest) => {
+      setBookingError(null);
+      const res = await apiFetch(`${zodEnv.BACKEND_URL}/bookings/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.success) {
+        const errorMsg =
+          data?.message ||
+          (res.status === 409
+            ? "This time slot is already booked. Please choose another."
+            : "Failed to confirm booking. Please try again.");
+        throw new Error(errorMsg);
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      // 1. Immediately invalidate taken slots cache so calendar reflects newly reserved slot
+      queryClient.invalidateQueries({
+        queryKey: ["taken-slots", resolvedShopId, selectedIsoDate],
+      });
+
+      // 2. Persist confirmed booking receipt in sessionStorage for the confirmation receipt screen
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(
+            "lastBooking",
+            JSON.stringify({
+              booking: {
+                ...data.booking,
+                customerEmail: customerEmail.trim(),
+              },
+              shopName: shop?.shopName || "Cherrybrush Studio",
+              location: shop?.location || "",
+              phone: shop?.phone || "",
+              durationText,
+              totalAmount,
+            }),
+          );
+        } catch (e) {
+          console.warn("Could not cache lastBooking in sessionStorage:", e);
+        }
+      }
+
+      // 3. Clear cart external store
+      clearCart();
+
+      // 4. Notify optional onContinue callback
+      onContinue?.(
+        selectedSlot,
+        selectedDateFormatted,
+        selectedIsoDate,
+        customerName.trim(),
+        `+91 ${phoneNumber.trim()}`,
+        customerEmail.trim(),
+      );
+
+      // 5. 1.5 second delay before redirecting user to the new confirmed page
+      setTimeout(() => {
+        const bookingId = data?.booking?._id || data?.booking?.id || "";
+        const redirectUrl = bookingId
+          ? `/book/confirmed?id=${encodeURIComponent(bookingId)}`
+          : "/book/confirmed";
+        window.location.href = redirectUrl;
+      }, 1500);
+    },
+    onError: (err: Error) => {
+      setBookingError(err.message || "Failed to confirm booking.");
+      // Invalidate slots in case it was a 409 conflict so UI updates taken states
+      queryClient.invalidateQueries({
+        queryKey: ["taken-slots", resolvedShopId, selectedIsoDate],
+      });
+    },
+  });
+
   const handleModifySelection = () => {
     if (onModifySelection) {
       onModifySelection();
@@ -368,11 +497,9 @@ function DateTimeSlotPickerContent({
             <div className="flex items-center gap-2 text-xs text-[#71717A] mb-4">
               <a
                 href="/book"
-                className="hover:text-[#18181B] transition-colors flex items-center gap-1"
+                className="hover:text-[#18181B] transition-colors flex items-center gap-1.5"
               >
-                <span className="material-symbols-outlined text-[15px]">
-                  <ArrowLeft className="w-4" />
-                </span>
+                <ArrowLeft className="w-4 h-4" />
                 <span>Cherrybrush</span>
               </a>
               <span>/</span>
@@ -431,9 +558,7 @@ function DateTimeSlotPickerContent({
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-[#E4E4E7] text-[#333333] flex items-center justify-center shrink-0">
-                          <span className="material-symbols-outlined text-[20px]">
-                            <CalendarCheck className="w-5" />
-                          </span>
+                          <CalendarCheck className="w-5 h-5" />
                         </div>
                         <div>
                           <span className="text-sm sm:text-base text-[#18181B] font-semibold block">
@@ -445,13 +570,11 @@ function DateTimeSlotPickerContent({
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`material-symbols-outlined text-[#71717A] text-[20px] transition-transform duration-200 ${
+                        <ChevronDown
+                          className={`w-5 h-5 text-[#71717A] transition-transform duration-200 ${
                             isCalendarOpen ? "rotate-180" : ""
                           }`}
-                        >
-                          expand_more
-                        </span>
+                        />
                       </div>
                     </div>
 
@@ -511,15 +634,13 @@ function DateTimeSlotPickerContent({
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {isClosed ? (
                       <div className="col-span-full p-6 rounded-DEFAULT bg-[#F4F4F5] border border-[#E4E4E7] text-center flex flex-col items-center justify-center gap-2">
-                        <span className="material-symbols-outlined text-2xl text-[#71717A]">
-                          event_busy
-                        </span>
+                        <CalendarX className="w-7 h-7 text-[#71717A]" />
                         <p className="text-sm font-semibold text-[#18181B]">
-                          Sanctuary Closed on {selectedDayName}s
+                          Place Closed on {selectedDayName}s
                         </p>
                         <p className="text-xs text-[#71717A] max-w-xs">
-                          Our artisans rest on this day. Please select another
-                          date above to reserve your ritual window.
+                          we are closed on this day. Please select another date
+                          above to reserve your appointment
                         </p>
                       </div>
                     ) : isShopLoading || isTakenLoading ? (
@@ -553,9 +674,7 @@ function DateTimeSlotPickerContent({
                               <span className="text-sm font-medium text-[#71717A] line-through">
                                 {slot.time}
                               </span>
-                              <span className="material-symbols-outlined text-[15px] text-[#71717A] shrink-0">
-                                lock
-                              </span>
+                              <Lock className="w-3.5 h-3.5 text-[#71717A] shrink-0" />
                             </button>
                           );
                         }
@@ -655,9 +774,7 @@ function DateTimeSlotPickerContent({
                                 />
                               ) : (
                                 <div className="w-12 h-12 rounded-DEFAULT bg-[#E4E4E7]/60 border border-[#E4E4E7] flex items-center justify-center shrink-0 text-[#71717A]">
-                                  <span className="material-symbols-outlined text-[20px]">
-                                    spa
-                                  </span>
+                                  <Sparkles className="w-5 h-5 text-[#71717A]" />
                                 </div>
                               )}
                               <div className="min-w-0">
@@ -674,7 +791,7 @@ function DateTimeSlotPickerContent({
                                     <p className="text-[11px] text-[#71717A] truncate">
                                       {item.selectedOptions
                                         .map(
-                                          (o: any) => o.featureName || o.name
+                                          (o: any) => o.featureName || o.name,
                                         )
                                         .join(", ")}
                                     </p>
@@ -701,13 +818,151 @@ function DateTimeSlotPickerContent({
                     )}
                   </div>
 
+                  {/* Customer Information */}
+                  <div className="flex flex-col gap-3 pt-3 border-t border-[#E4E4E7]">
+                    <div>
+                      <span className="text-xs uppercase tracking-wider text-[#71717A] font-medium">
+                        Your Details
+                      </span>
+                      <h3 className="text-base text-[#18181B] mt-0.5">
+                        Contact Information
+                      </h3>
+                    </div>
+
+                    {/* Name Field */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-[#71717A] uppercase tracking-widest font-medium">
+                        Full Name
+                      </label>
+                      <div
+                        className={`relative flex items-center gap-3 p-3.5 rounded-DEFAULT border transition-colors ${
+                          submitAttempted && !isNameValid
+                            ? "bg-red-50 border-red-200"
+                            : customerName && isNameValid
+                              ? "bg-[#F4F4F5] border-[#333333]"
+                              : "bg-[#F4F4F5] border-[#E4E4E7]"
+                        }`}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-[#E4E4E7] flex items-center justify-center shrink-0">
+                          <User className="w-4 h-4 text-[#71717A]" />
+                        </div>
+                        <input
+                          type="text"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          placeholder="e.g. Priya Sharma"
+                          className="flex-1 bg-transparent text-sm text-[#18181B] placeholder-[#A1A1AA] outline-none font-medium"
+                        />
+                        {customerName && isNameValid && (
+                          <CheckCircle2 className="w-4 h-4 text-[#333333] shrink-0" />
+                        )}
+                      </div>
+                      {submitAttempted && !isNameValid && (
+                        <p className="text-[11px] text-red-500 ml-1">
+                          Please enter at least 2 characters
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Email Field */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-[#71717A] uppercase tracking-widest font-medium">
+                        Email Address
+                      </label>
+                      <div
+                        className={`relative flex items-center gap-3 p-3.5 rounded-DEFAULT border transition-colors ${
+                          submitAttempted && !isEmailValid
+                            ? "bg-red-50 border-red-200"
+                            : customerEmail && isEmailValid
+                              ? "bg-[#F4F4F5] border-[#333333]"
+                              : "bg-[#F4F4F5] border-[#E4E4E7]"
+                        }`}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-[#E4E4E7] flex items-center justify-center shrink-0">
+                          <Mail className="w-3.5 h-3.5 text-[#71717A]" />
+                        </div>
+                        <input
+                          type="email"
+                          value={customerEmail}
+                          onChange={(e) => setCustomerEmail(e.target.value)}
+                          placeholder="e.g. priya@example.com"
+                          className="flex-1 bg-transparent text-sm text-[#18181B] placeholder-[#A1A1AA] outline-none font-medium"
+                        />
+                        {customerEmail && isEmailValid && (
+                          <CheckCircle2 className="w-4 h-4 text-[#333333] shrink-0" />
+                        )}
+                      </div>
+                      {submitAttempted && !isEmailValid && (
+                        <p className="text-[11px] text-red-500 ml-1">
+                          {customerEmail.trim() === ""
+                            ? "Email address is required"
+                            : "Please enter a valid email address"}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Phone Field */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-[#71717A] uppercase tracking-widest font-medium">
+                        Phone Number
+                      </label>
+                      <div
+                        className={`relative flex items-center gap-3 p-3.5 rounded-DEFAULT border transition-colors ${
+                          submitAttempted && !isPhoneValid
+                            ? "bg-red-50 border-red-200"
+                            : phoneNumber && isPhoneValid
+                              ? "bg-[#F4F4F5] border-[#333333]"
+                              : "bg-[#F4F4F5] border-[#E4E4E7]"
+                        }`}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-[#E4E4E7] flex items-center justify-center shrink-0">
+                          <Phone className="w-3.5 h-3.5 text-[#71717A]" />
+                        </div>
+                        <span className="text-sm text-[#71717A] font-medium shrink-0">
+                          +91
+                        </span>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          value={phoneNumber}
+                          onChange={(e) =>
+                            setPhoneNumber(e.target.value.replace(/\D/g, ""))
+                          }
+                          placeholder="98765 43210"
+                          className="flex-1 bg-transparent text-sm text-[#18181B] placeholder-[#A1A1AA] outline-none font-medium tracking-wide"
+                        />
+                        {phoneNumber && isPhoneValid && (
+                          <CheckCircle2 className="w-4 h-4 text-[#333333] shrink-0" />
+                        )}
+                      </div>
+                      {submitAttempted && !isPhoneValid && (
+                        <p className="text-[11px] text-red-500 ml-1">
+                          Enter a valid 10-digit Indian mobile number
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Special Requests / Notes (Optional) */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-[#71717A] uppercase tracking-widest font-medium">
+                        Special Requests (Optional)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Any preferences, allergies, or first-time visit notes..."
+                        className="w-full p-3 rounded-DEFAULT bg-[#F4F4F5] border border-[#E4E4E7] text-xs sm:text-sm text-[#18181B] placeholder-[#A1A1AA] outline-none focus:border-[#333333] transition-colors resize-none font-normal"
+                      />
+                    </div>
+                  </div>
+
                   {/* Reserved Date & Slot Anchor Card */}
-                  <div className="bg-[#F4F4F5] border border-[#E4E4E7] rounded-DEFAULT p-3.5   flex items-center justify-between shadow-xs">
+                  <div className="bg-[#F4F4F5] border border-[#E4E4E7] rounded-DEFAULT p-3.5 flex items-center justify-between shadow-xs">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-[#E4E4E7] text-[#333333] flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-[18px]">
-                          schedule
-                        </span>
+                        <Clock className="w-4 h-4 text-[#333333]" />
                       </div>
                       <div>
                         <p className="text-[10px] text-[#71717A] uppercase tracking-wide font-medium">
@@ -719,9 +974,7 @@ function DateTimeSlotPickerContent({
                         </p>
                       </div>
                     </div>
-                    <span className="material-symbols-outlined text-[18px] text-[#333333]">
-                      <Verified className="w-6" />
-                    </span>
+                    <Verified className="w-6 h-6 text-[#333333]" />
                   </div>
 
                   {/* Pricing Breakdown */}
@@ -735,13 +988,21 @@ function DateTimeSlotPickerContent({
 
                     <div className="pt-4 border-t border-[#E4E4E7] flex items-center justify-between">
                       <span className="text-xs uppercase tracking-wider text-[#71717A] font-medium">
-                        Total Investment
+                        Total Amount
                       </span>
                       <span className="font-title-md text-title-md font-semibold text-[#18181B]">
                         ₹{totalAmount}
                       </span>
                     </div>
                   </div>
+
+                  {/* Booking Error Banner */}
+                  {bookingError && (
+                    <div className="p-3 rounded-DEFAULT bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 animate-in fade-in">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                      <span>{bookingError}</span>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2 pt-1">
                     <div
@@ -751,25 +1012,100 @@ function DateTimeSlotPickerContent({
                       <SlideCommit
                         label={
                           cartItems.length === 0
-                            ? "Select rituals first"
+                            ? "Select a Service first"
                             : !selectedSlot
                               ? "Select a slot above"
-                              : "Book Your Appointment"
+                              : bookingMutation.isPending
+                                ? "Confirming booking..."
+                                : "Slide to Confirm Booking"
                         }
-                        doneLabel="Proceeding..."
-                        disabled={cartItems.length === 0 || !selectedSlot}
+                        doneLabel="Booking Confirmed!"
+                        errorLabel={bookingError || "Check Required Details"}
+                        disabled={
+                          cartItems.length === 0 ||
+                          !selectedSlot ||
+                          bookingMutation.isPending
+                        }
                         trackColor="#333333"
                         handleColor="#FFFFFF"
-                        successColor="#18181B"
+                        successColor="#16a34a"
                         width={slideWidth}
                         height={52}
                         radius={26}
-                        onDone={() => {
-                          onContinue?.(
-                            selectedSlot,
-                            selectedDateFormatted,
-                            selectedIsoDate,
-                          );
+                        holdMs={2000}
+                        onConfirm={async () => {
+                          if (!resolvedShopId) {
+                            throw new Error(
+                              "Salon shop information is not loaded yet.",
+                            );
+                          }
+                          if (!selectedIsoDate) {
+                            throw new Error(
+                              "Please select an appointment date.",
+                            );
+                          }
+                          if (!selectedSlot) {
+                            throw new Error(
+                              "Please choose an available time slot.",
+                            );
+                          }
+                          if (!isCustomerInfoValid) {
+                            setSubmitAttempted(true);
+                            if (!isNameValid) {
+                              throw new Error(
+                                "Please enter your full name (at least 2 characters).",
+                              );
+                            }
+                            if (!isEmailValid) {
+                              throw new Error(
+                                "Please enter a valid email address.",
+                              );
+                            }
+                            if (!isPhoneValid) {
+                              throw new Error(
+                                "Please enter a valid 10-digit mobile number.",
+                              );
+                            }
+                            throw new Error(
+                              "Please fill in your contact information above.",
+                            );
+                          }
+                          if (cartItems.length === 0) {
+                            throw new Error(
+                              "No Services selected in your cart.",
+                            );
+                          }
+
+                          const payload: BookingCreateRequest = {
+                            customerName: customerName.trim(),
+                            customerEmail: customerEmail.trim(),
+                            customerPhone: `+91 ${phoneNumber.trim()}`,
+                            shopId: resolvedShopId,
+                            date: selectedIsoDate,
+                            timeSlot: selectedSlot,
+                            cart: cartItems.map((item) => ({
+                              serviceId: item.serviceId || item.id,
+                              serviceName: item.name,
+                              selectedOptions: (item.selectedOptions || []).map(
+                                (opt) => ({
+                                  featureName:
+                                    opt.featureName || opt.name || "",
+                                  price:
+                                    typeof opt.price === "string"
+                                      ? opt.price
+                                      : `₹${opt.price || 0}`,
+                                  additive: opt.additive !== false,
+                                }),
+                              ),
+                              totalPrice: (item.price || 0) * (item.qty || 1),
+                            })),
+                            notes: notes.trim() || undefined,
+                          };
+
+                          return bookingMutation.mutateAsync(payload);
+                        }}
+                        onError={(err: any) => {
+                          setBookingError(err?.message || "Booking failed");
                         }}
                       />
                     </div>

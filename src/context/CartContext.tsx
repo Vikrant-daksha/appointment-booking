@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useMemo, useSyncExternalStore } from "react";
 
+export const MAX_CART_LIMIT = 30;
+
 export interface CartOption {
   groupName?: string;
   featureName?: string;
@@ -30,6 +32,7 @@ export interface CartContextType {
   items: CartItem[];
   addItem: (product: CartItem) => void;
   removeItem: (id: string) => void;
+  updateQty: (id: string, qty: number) => void;
   toggleItem: (product: CartItem) => void;
   clearCart: () => void;
   isInCart: (id: string) => boolean;
@@ -118,12 +121,31 @@ export const useCart = (): CartContextType => {
   const items = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const addItem = (product: CartItem) => {
-    const addQty = product.qty && product.qty > 0 ? product.qty : 1;
+    const rawAddQty = product.qty && product.qty > 0 ? product.qty : 1;
+    const currentTotalCount = cartMemoryStore.reduce(
+      (sum, item) => sum + (item.qty || 1),
+      0
+    );
+
+    // Hard limit: total cart count cannot exceed MAX_CART_LIMIT (30)
+    const availableTotalCapacity = MAX_CART_LIMIT - currentTotalCount;
+    if (availableTotalCapacity <= 0) return;
+
     const existing = cartMemoryStore.find((item) => item.id === product.id);
+    const existingQty = existing ? existing.qty || 1 : 0;
+
+    // Hard limit: no single item can exceed MAX_CART_LIMIT (30)
+    const availableItemCapacity = MAX_CART_LIMIT - existingQty;
+    if (availableItemCapacity <= 0) return;
+
+    // The actual allowed quantity without violating either ceiling
+    const addQty = Math.min(rawAddQty, availableTotalCapacity, availableItemCapacity);
+    if (addQty <= 0) return;
+
     let next: CartItem[];
     if (existing) {
       next = cartMemoryStore.map((item) =>
-        item.id === product.id ? { ...item, qty: (item.qty || 1) + addQty } : item
+        item.id === product.id ? { ...item, qty: existingQty + addQty } : item
       );
     } else {
       next = [...cartMemoryStore, { ...product, qty: addQty }];
@@ -136,12 +158,42 @@ export const useCart = (): CartContextType => {
     updateStore(next);
   };
 
+  const updateQty = (id: string, newQty: number) => {
+    if (newQty <= 0) {
+      removeItem(id);
+      return;
+    }
+    const existing = cartMemoryStore.find((item) => item.id === id);
+    if (!existing) return;
+
+    const currentItemQty = existing.qty || 1;
+    const currentTotalCount = cartMemoryStore.reduce(
+      (sum, item) => sum + (item.qty || 1),
+      0
+    );
+    const otherItemsCount = currentTotalCount - currentItemQty;
+
+    // Must not exceed MAX_CART_LIMIT for this item, and must not cause total to exceed MAX_CART_LIMIT
+    const maxAllowedForItem = Math.min(
+      MAX_CART_LIMIT,
+      Math.max(1, MAX_CART_LIMIT - otherItemsCount)
+    );
+    const clampedQty = Math.min(maxAllowedForItem, Math.max(1, newQty));
+
+    const next = cartMemoryStore.map((item) =>
+      item.id === id ? { ...item, qty: clampedQty } : item
+    );
+    updateStore(next);
+  };
+
   const toggleItem = (product: CartItem) => {
     const exists = cartMemoryStore.some((item) => item.id === product.id);
-    const next = exists
-      ? cartMemoryStore.filter((item) => item.id !== product.id)
-      : [...cartMemoryStore, { ...product, qty: 1 }];
-    updateStore(next);
+    if (exists) {
+      const next = cartMemoryStore.filter((item) => item.id !== product.id);
+      updateStore(next);
+    } else {
+      addItem(product);
+    }
   };
 
   const clearCart = () => {
@@ -181,6 +233,7 @@ export const useCart = (): CartContextType => {
     items,
     addItem,
     removeItem,
+    updateQty,
     toggleItem,
     clearCart,
     isInCart,

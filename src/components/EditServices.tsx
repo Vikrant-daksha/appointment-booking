@@ -14,6 +14,17 @@ import {
   ServiceCreateSchema,
 } from "../types/booking.ts";
 import { Button } from "./ui/Button.tsx";
+import {
+  SortableImageGrid,
+  type SortableImageItem,
+} from "./ui/SortableImageGrid.tsx";
+import {
+  Pencil,
+  Trash2,
+  UploadCloud,
+  Check,
+  Plus,
+} from "lucide-react";
 
 interface OptionRow {
   groupName: string;
@@ -31,10 +42,14 @@ function EditServicesInner() {
   const [serviceDuration, setServiceDuration] = useState("45 mins");
   const [basePrice, setBasePrice] = useState("");
   const [serviceDown, setServiceDown] = useState(false);
-  const [images, setImages] = useState<File[]>([]);
+  const [stagedImages, setStagedImages] = useState<SortableImageItem[]>([]);
   const [optionRows, setOptionRows] = useState<OptionRow[]>([]);
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  // Edit & Delete states
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
@@ -46,7 +61,7 @@ function EditServicesInner() {
     }
   }, []);
 
-  // 1. Fetch Shop details via useQuery (checks /admin/get-shop or /admin/shop)
+  // 1. Fetch Shop details via useQuery
   const {
     data: shop,
     isLoading: isShopLoading,
@@ -65,18 +80,14 @@ function EditServicesInner() {
     enabled: isAuthenticated === true,
   });
 
-  // Multilayer shopId resolution:
-  // 1. From fetched shop profile (_id / id)
-  // 2. Fallback to adminId directly decoded from JWT accessToken
   const storedAdmin = typeof window !== "undefined" ? getStoredAdminInfo() : null;
   const shopId = shop?._id ?? shop?.id ?? (shop as any)?.shopId ?? storedAdmin?.adminId;
 
-  // 2. Fetch Services catalog with key ['services'] via useQuery
-  // Reads stored admin._id from login/register response
   const storedAdminId =
     typeof window !== "undefined" ? localStorage.getItem("adminId") : null;
   const effectiveShopId = storedAdminId || shopId;
 
+  // 2. Fetch Services catalog with key ['services'] via useQuery
   const {
     data: services = [],
     isLoading: isServicesLoading,
@@ -107,7 +118,7 @@ function EditServicesInner() {
     enabled: isAuthenticated === true,
   });
 
-  // Extract unique existing service categories so the admin can pick from them or create new
+  // Extract unique existing service categories
   const existingTypes = React.useMemo(() => {
     return Array.from(
       new Set(
@@ -118,7 +129,119 @@ function EditServicesInner() {
     );
   }, [services]);
 
-  // 3. Create Service via useMutation with invalidateQueries(['services'])
+  // Cancel Edit and reset form back to create mode
+  const handleCancelEdit = () => {
+    // Revoke any temporary object URLs
+    stagedImages.forEach((item) => {
+      if (!item.isExisting && item.url) {
+        URL.revokeObjectURL(item.url);
+      }
+    });
+
+    setEditingService(null);
+    setServiceName("");
+    setServiceType("");
+    setServiceDuration("45 mins");
+    setBasePrice("");
+    setServiceDown(false);
+    setStagedImages([]);
+    setOptionRows([]);
+    setFormError("");
+    setSuccessMessage("");
+  };
+
+  // Start Editing an existing service
+  const handleStartEdit = (svc: Service) => {
+    // Revoke previous staged URLs if any
+    stagedImages.forEach((item) => {
+      if (!item.isExisting && item.url) {
+        URL.revokeObjectURL(item.url);
+      }
+    });
+
+    setEditingService(svc);
+    setServiceName(svc.serviceName || "");
+    setServiceType(svc.serviceType || "");
+    setServiceDuration(svc.serviceDuration || "45 mins");
+    setBasePrice(
+      svc.basePrice !== undefined && svc.basePrice !== null
+        ? String(svc.basePrice).replace(/^₹/, "")
+        : ""
+    );
+    setServiceDown(Boolean(svc.serviceDown));
+
+    // Map existing Cloudinary images to sortable items
+    const loadedImages: SortableImageItem[] = (svc.serviceImages || []).map(
+      (url, i) => ({
+        id: `existing-${url}-${i}`,
+        url,
+        isExisting: true,
+        name: `Photo ${i + 1}`,
+      })
+    );
+    setStagedImages(loadedImages);
+
+    // Convert serviceOptions to optionRows
+    const rows: OptionRow[] = [];
+    if (svc.serviceOptions) {
+      Object.entries(svc.serviceOptions).forEach(([groupName, features]) => {
+        if (Array.isArray(features)) {
+          features.forEach((f) => {
+            rows.push({
+              groupName: groupName || "Add-ons",
+              name: f.name || "",
+              price: f.price || "₹",
+            });
+          });
+        }
+      });
+    }
+    setOptionRows(rows);
+    setFormError("");
+    setSuccessMessage("");
+
+    // Scroll form into view
+    window.scrollTo({ top: 200, behavior: "smooth" });
+  };
+
+  // Handle adding new files to stagedImages
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
+    if (stagedImages.length + files.length > 10) {
+      setFormError("Maximum 10 images allowed per service.");
+      return;
+    }
+
+    const newItems: SortableImageItem[] = files.map((file, i) => ({
+      id: `file-${file.name}-${file.lastModified}-${Date.now()}-${i}`,
+      url: URL.createObjectURL(file),
+      file,
+      isExisting: false,
+      name: file.name,
+      size: file.size,
+    }));
+
+    setStagedImages((prev) => [...prev, ...newItems]);
+    setFormError("");
+
+    // Clear input so same file can be re-selected if removed
+    e.target.value = "";
+  };
+
+  // Handle removing a single image from stagedImages
+  const handleRemoveStagedImage = (id: string) => {
+    setStagedImages((prev) => {
+      const item = prev.find((it) => it.id === id);
+      if (item && !item.isExisting && item.url) {
+        URL.revokeObjectURL(item.url);
+      }
+      return prev.filter((it) => it.id !== id);
+    });
+  };
+
+  // 3. Create Service mutation
   const createServiceMutation = useMutation({
     mutationFn: async (formData: FormData) => {
       const res = await apiFetch(`/admin/services/create`, {
@@ -129,28 +252,121 @@ function EditServicesInner() {
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(
-          errBody.message || `Failed to create service (${res.status})`,
+          errBody.message || `Failed to create service (${res.status})`
         );
       }
 
       return await res.json();
     },
     onSuccess: () => {
-      // Invalidate queries tagged with key ['services']
       queryClient.invalidateQueries({ queryKey: ["services"] });
       setSuccessMessage("Service created and added to catalog successfully!");
-      setServiceName("");
-      setServiceType("");
-      setServiceDuration("45 mins");
-      setBasePrice("");
-      setServiceDown(false);
-      setImages([]);
-      setOptionRows([]);
-      setFormError("");
+      handleCancelEdit();
       setTimeout(() => setSuccessMessage(""), 5000);
     },
     onError: (err: Error) => {
       setFormError(err.message || "Failed to create service");
+      setSuccessMessage("");
+    },
+  });
+
+  // 4. Edit/Update Service mutation
+  const editServiceMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const svcId = editingService?._id || editingService?.id;
+      if (!svcId) throw new Error("Service ID is required for editing");
+
+      let res = await apiFetch(`/admin/services/edit/${svcId}`, {
+        method: "POST",
+        body: formData,
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        res = await apiFetch(`/admin/services/${svcId}`, {
+          method: "PUT",
+          body: formData,
+        }).catch(() => null);
+      }
+
+      if (!res || !res.ok) {
+        res = await apiFetch(`/admin/services/edit`, {
+          method: "POST",
+          body: formData,
+        }).catch(() => null);
+      }
+
+      if (!res || !res.ok) {
+        res = await apiFetch(`/admin/services/${svcId}`, {
+          method: "PATCH",
+          body: formData,
+        });
+      }
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(
+          errBody.message || `Failed to update service (${res.status})`
+        );
+      }
+
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      setSuccessMessage(`Service "${serviceName}" updated successfully!`);
+      handleCancelEdit();
+      setTimeout(() => setSuccessMessage(""), 5000);
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Failed to update service");
+      setSuccessMessage("");
+    },
+  });
+
+  // 5. Delete Service mutation
+  const deleteServiceMutation = useMutation({
+    mutationFn: async (svcId: string) => {
+      let res = await apiFetch(`/admin/services/${svcId}`, {
+        method: "DELETE",
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        res = await apiFetch(`/admin/services/delete/${svcId}`, {
+          method: "DELETE",
+        }).catch(() => null);
+      }
+
+      if (!res || !res.ok) {
+        res = await apiFetch(`/admin/services/delete`, {
+          method: "POST",
+          body: JSON.stringify({ serviceId: svcId, id: svcId }),
+        });
+      }
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(
+          errBody.message || `Failed to delete service (${res.status})`
+        );
+      }
+
+      return await res.json();
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      setSuccessMessage("Service deleted successfully!");
+      if (
+        editingService &&
+        (editingService._id === deletedId || editingService.id === deletedId)
+      ) {
+        handleCancelEdit();
+      }
+      setDeletingId(null);
+      setTimeout(() => setSuccessMessage(""), 5000);
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Failed to delete service");
+      setDeletingId(null);
       setSuccessMessage("");
     },
   });
@@ -169,10 +385,10 @@ function EditServicesInner() {
   const handleOptionChange = (
     index: number,
     field: keyof OptionRow,
-    value: string,
+    value: string
   ) => {
     setOptionRows((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
+      prev.map((row, i) => (i === index ? { ...row, [field]: value } : row))
     );
   };
 
@@ -181,12 +397,10 @@ function EditServicesInner() {
     setFormError("");
     setSuccessMessage("");
 
-    // Read admin._id stored during login/register
     const adminId =
       typeof window !== "undefined" ? localStorage.getItem("adminId") : null;
     const targetShopId = adminId || shopId;
 
-    // 1. Client-side Zod validation with strong types
     const validation = ServiceCreateSchema.safeParse({
       shopId: targetShopId ? String(targetShopId) : undefined,
       serviceName: serviceName.trim(),
@@ -202,7 +416,6 @@ function EditServicesInner() {
     }
 
     const fd = new FormData();
-    // Pass shopId: admin._id as required by the backend
     if (targetShopId) {
       fd.append("shopId", String(targetShopId));
     }
@@ -214,9 +427,14 @@ function EditServicesInner() {
     }
     fd.append("serviceDown", String(serviceDown));
 
-    // Append raw image files (BackendSpec supports field `images`)
-    images.forEach((file) => {
-      fd.append("images", file);
+    // Append images in their EXACT reordered sequence
+    stagedImages.forEach((item) => {
+      if (item.file) {
+        fd.append("images", item.file);
+      } else if (item.isExisting) {
+        fd.append("existingImages", item.url);
+        fd.append("serviceImages", item.url);
+      }
     });
 
     // Structure serviceOptions if any add-ons are specified
@@ -252,7 +470,17 @@ function EditServicesInner() {
       }
     }
 
-    createServiceMutation.mutate(fd);
+    if (editingService) {
+      const svcId = editingService.id ?? editingService._id;
+      if (svcId) {
+        fd.append("serviceId", String(svcId));
+        fd.append("id", String(svcId));
+        fd.append("_id", String(svcId));
+      }
+      editServiceMutation.mutate(fd);
+    } else {
+      createServiceMutation.mutate(fd);
+    }
   };
 
   if (isAuthenticated === false) {
@@ -263,13 +491,16 @@ function EditServicesInner() {
     );
   }
 
+  const isMutating =
+    createServiceMutation.isPending || editServiceMutation.isPending;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-10">
-      {/* 1. Header & Shop Overview (from useQuery) */}
+      {/* 1. Header & Shop Overview */}
       <section className="bg-gradient-to-r from-rose-50 to-pink-50/50 rounded-3xl p-6 md:p-8 border border-rose-100 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-200/60 text-rose-800 text-xs font-semibold mb-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#E2B4BD]/30 text-[#9B6A73] text-xs font-semibold mb-2">
               <span>Admin Management</span>
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-neutral-900">
@@ -277,7 +508,7 @@ function EditServicesInner() {
             </h1>
             <p className="text-sm text-neutral-600 mt-1">
               Configure treatments, service timings, add-on features, and
-              Cloudinary showcase images.
+              showcase images.
             </p>
           </div>
 
@@ -309,19 +540,32 @@ function EditServicesInner() {
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* 2. Create Service Form (via useMutation) */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-6 md:p-7 border border-neutral-200 shadow-sm">
-          <div className="mb-6">
-            <h2 className="text-xl font-bold text-neutral-900">
-              Create New Service
-            </h2>
-            <p className="text-xs text-neutral-500 mt-1">
-              Submits directly to{" "}
-              <code className="bg-neutral-100 px-1 py-0.5 rounded text-[11px]">
-                POST /admin/services/create
-              </code>{" "}
-              and updates the live catalog.
-            </p>
+        {/* 2. Create or Edit Service Form */}
+        <div
+          id="service-form"
+          className={`lg:col-span-5 bg-white rounded-3xl p-6 md:p-7 border transition-all ${
+            editingService
+              ? "border-[#E2B4BD] ring-2 ring-[#E2B4BD]/20 shadow-md"
+              : "border-neutral-200 shadow-sm"
+          }`}
+        >
+          <div className="mb-6 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
+                {editingService ? "Edit Service" : "Create New Service"}
+              </h2>
+              <p className="text-xs text-neutral-500 mt-1">
+                {editingService
+                  ? `Modifying "${editingService.serviceName}". Save changes or cancel.`
+                  : "Fill out service details and upload images to add to the live catalog."}
+              </p>
+            </div>
+
+            {editingService && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E2B4BD]/20 text-[#9B6A73] shrink-0">
+                Edit Mode
+              </span>
+            )}
           </div>
 
           {formError && (
@@ -348,109 +592,98 @@ function EditServicesInner() {
                 placeholder="e.g. Classic Haircut & Blow Dry"
                 value={serviceName}
                 onChange={(e) => setServiceName(e.target.value)}
-                className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 transition"
+                className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-[#E2B4BD] focus:ring-1 focus:ring-[#E2B4BD] transition"
                 required
               />
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-neutral-700">
-                  Category / Service Type <span className="text-rose-500">*</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+                  Category / Type <span className="text-rose-500">*</span>
                 </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Hair, Nails, Facial"
+                  value={serviceType}
+                  onChange={(e) => setServiceType(e.target.value)}
+                  list="category-suggestions"
+                  className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-[#E2B4BD] focus:ring-1 focus:ring-[#E2B4BD] transition"
+                  required
+                />
                 {existingTypes.length > 0 && (
-                  <span className="text-[11px] text-neutral-400">
-                    {existingTypes.length} {existingTypes.length === 1 ? "category" : "categories"} in use
-                  </span>
+                  <datalist id="category-suggestions">
+                    {existingTypes.map((t) => (
+                      <option key={t} value={t} />
+                    ))}
+                  </datalist>
                 )}
               </div>
-              <input
-                type="text"
-                list="existing-service-types"
-                placeholder="e.g. Hair Care, Nail Art, Facials, Waxing..."
-                value={serviceType}
-                onChange={(e) => setServiceType(e.target.value)}
-                className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 transition"
-                required
-              />
-              <datalist id="existing-service-types">
-                {existingTypes.map((type) => (
-                  <option key={type} value={type} />
-                ))}
-              </datalist>
 
-              {/* Quick-pick existing categories or type a new one */}
-              {existingTypes.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[11px] text-neutral-400 font-medium">Existing:</span>
-                  {existingTypes.map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setServiceType(type)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer border ${
-                        serviceType.trim().toLowerCase() === type.trim().toLowerCase()
-                          ? "bg-rose-100 text-rose-800 border-rose-300 shadow-2xs"
-                          : "bg-neutral-50 hover:bg-neutral-100 text-neutral-600 border-neutral-200"
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
                   Duration <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 45 mins, 1 hour"
+                <select
                   value={serviceDuration}
                   onChange={(e) => setServiceDuration(e.target.value)}
-                  className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 transition"
-                  required
-                />
+                  className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-[#E2B4BD] focus:ring-1 focus:ring-[#E2B4BD] transition bg-white"
+                >
+                  <option value="15 mins">15 mins</option>
+                  <option value="30 mins">30 mins</option>
+                  <option value="45 mins">45 mins</option>
+                  <option value="60 mins">60 mins</option>
+                  <option value="90 mins">90 mins</option>
+                  <option value="120 mins">120 mins</option>
+                </select>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                  Base Price (₹)
-                </label>
+            <div>
+              <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+                Base Price
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">
+                  ₹
+                </span>
                 <input
-                  type="text"
-                  placeholder="e.g. 499 or ₹499"
+                  type="number"
+                  placeholder="e.g. 500"
                   value={basePrice}
                   onChange={(e) => setBasePrice(e.target.value)}
-                  className="w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 transition"
+                  className="w-full rounded-xl border border-neutral-200 pl-8 pr-3.5 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-[#E2B4BD] focus:ring-1 focus:ring-[#E2B4BD] transition"
                 />
               </div>
             </div>
 
-            {/* Direct Image File Upload */}
+            {/* DnD Kit Sortable Image Grid */}
+            {stagedImages.length > 0 && (
+              <div className="pt-2">
+                <SortableImageGrid
+                  items={stagedImages}
+                  onReorder={setStagedImages}
+                  onRemove={handleRemoveStagedImage}
+                  maxItems={10}
+                />
+              </div>
+            )}
+
+            {/* Upload Additional or New Images */}
             <div>
               <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
-                Showcase Images (Up to 10 files)
+                {stagedImages.length > 0 ? "Add More Photos" : "Showcase Images"}
               </label>
               <input
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(e) => {
-                  const selected = Array.from(e.target.files ?? []);
-                  setImages(selected);
-                }}
-                className="w-full text-xs text-neutral-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-rose-100 file:text-rose-700 hover:file:bg-rose-200 cursor-pointer"
+                onChange={handleFilesSelected}
+                className="w-full text-xs text-neutral-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#E2B4BD]/20 file:text-[#9B6A73] hover:file:bg-[#E2B4BD]/30 cursor-pointer"
               />
-              {images.length > 0 && (
-                <p className="text-[11px] text-emerald-600 mt-1">
-                  ✓ {images.length} file{images.length > 1 ? "s" : ""} selected
-                  for Cloudinary upload
-                </p>
-              )}
+              <p className="text-[11px] text-neutral-400 mt-1">
+                Drag cards above to set cover photo and rearrange showcase sequence.
+              </p>
             </div>
 
             {/* Service Options / Add-ons builder */}
@@ -462,7 +695,7 @@ function EditServicesInner() {
                 <button
                   type="button"
                   onClick={handleAddOption}
-                  className="text-xs text-rose-600 hover:text-rose-700 font-semibold"
+                  className="text-xs text-[#9B6A73] hover:text-[#7A4E56] font-semibold cursor-pointer"
                 >
                   + Add Option
                 </button>
@@ -479,7 +712,7 @@ function EditServicesInner() {
                         onChange={(e) =>
                           handleOptionChange(idx, "name", e.target.value)
                         }
-                        className="flex-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs"
+                        className="flex-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#E2B4BD]"
                       />
                       <input
                         type="text"
@@ -488,12 +721,12 @@ function EditServicesInner() {
                         onChange={(e) =>
                           handleOptionChange(idx, "price", e.target.value)
                         }
-                        className="w-20 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs"
+                        className="w-20 rounded-lg border border-neutral-200 px-2 py-1.5 text-xs focus:outline-none focus:border-[#E2B4BD]"
                       />
                       <button
                         type="button"
                         onClick={() => handleRemoveOption(idx)}
-                        className="text-neutral-400 hover:text-rose-600 text-sm px-1"
+                        className="text-neutral-400 hover:text-rose-600 text-sm px-1 cursor-pointer"
                         title="Remove"
                       >
                         ✕
@@ -520,24 +753,41 @@ function EditServicesInner() {
                 <span className="font-semibold block text-neutral-800">
                   Temporarily Hide (Service Down)
                 </span>
-                Keep in catalog for admins, but hide from customer booking
-                slots.
+                Keep in catalog for admins, but hide from customer booking slots.
               </label>
             </div>
 
-            <Button
-              type="submit"
-              disabled={createServiceMutation.isPending}
-              className="w-full mt-2"
-            >
-              {createServiceMutation.isPending
-                ? "Creating & Uploading..."
-                : "Publish Service"}
-            </Button>
+            {/* Action Buttons: Submit / Save Changes vs Cancel */}
+            <div className="flex items-center gap-2.5 pt-2">
+              <Button
+                type="submit"
+                disabled={isMutating}
+                className="flex-1 cursor-pointer"
+              >
+                {editingService
+                  ? editServiceMutation.isPending
+                    ? "Updating Service..."
+                    : "Save Changes"
+                  : createServiceMutation.isPending
+                  ? "Creating & Uploading..."
+                  : "Publish Service"}
+              </Button>
+
+              {editingService && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={isMutating}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-neutral-300 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 transition cursor-pointer"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
           </form>
         </div>
 
-        {/* 3. Existing Services Catalog (rendered via useQuery with key ['services']) */}
+        {/* 3. Existing Services Catalog */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
             <div>
@@ -545,10 +795,7 @@ function EditServicesInner() {
                 Current Services
               </h2>
               <p className="text-xs text-neutral-500">
-                Synced in real-time using TanStack Query key{" "}
-                <code className="bg-neutral-100 px-1 py-0.5 rounded text-[11px]">
-                  ['services']
-                </code>
+                Manage, edit, or delete existing treatments from your salon menu.
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-neutral-100 text-neutral-700 text-xs font-semibold">
@@ -577,10 +824,20 @@ function EditServicesInner() {
             <div className="space-y-3">
               {services.map((svc) => {
                 const svcId = svc.id ?? svc._id;
+                const isCurrentEditing = Boolean(
+                  editingService &&
+                  (editingService._id === svcId || editingService.id === svcId)
+                );
+                const isDeleting = deletingId === svcId;
+
                 return (
                   <div
                     key={svcId}
-                    className="p-5 rounded-2xl bg-white border border-neutral-200 hover:border-neutral-300 shadow-2xs transition space-y-3"
+                    className={`p-5 rounded-2xl bg-white border transition space-y-3 shadow-2xs ${
+                      isCurrentEditing
+                        ? "border-[#E2B4BD] ring-2 ring-[#E2B4BD]/20 bg-[#FFF5F5]/30"
+                        : "border-neutral-200 hover:border-neutral-300"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -588,6 +845,11 @@ function EditServicesInner() {
                           <h3 className="font-semibold text-neutral-900 text-base">
                             {svc.serviceName}
                           </h3>
+                          {isCurrentEditing && (
+                            <span className="px-2 py-0.5 rounded-full bg-[#E2B4BD]/20 text-[#9B6A73] text-[10px] font-bold">
+                              Editing
+                            </span>
+                          )}
                           {svc.serviceDown ? (
                             <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold">
                               Hidden (Down)
@@ -607,19 +869,76 @@ function EditServicesInner() {
                           <span className="text-neutral-700 font-medium">
                             {svc.serviceDuration}
                           </span>
-                          {svc.basePrice !== undefined && svc.basePrice !== null && (
-                            <>
-                              {" "}• Base Price:{" "}
-                              <span className="text-neutral-900 font-semibold">
-                                {typeof svc.basePrice === "number"
-                                  ? `₹${svc.basePrice}`
-                                  : svc.basePrice.toString().startsWith("₹")
-                                  ? svc.basePrice
-                                  : `₹${svc.basePrice}`}
-                              </span>
-                            </>
-                          )}
+                          {svc.basePrice !== undefined &&
+                            svc.basePrice !== null && (
+                              <>
+                                {" "}• Base Price:{" "}
+                                <span className="text-neutral-900 font-semibold">
+                                  {typeof svc.basePrice === "number"
+                                    ? `₹${svc.basePrice}`
+                                    : svc.basePrice.toString().startsWith("₹")
+                                    ? svc.basePrice
+                                    : `₹${svc.basePrice}`}
+                                </span>
+                              </>
+                            )}
                         </p>
+                      </div>
+
+                      {/* Edit & Delete Action Buttons */}
+                      <div className="shrink-0">
+                        {isDeleting ? (
+                          <div className="flex items-center gap-2 p-1.5 rounded-xl bg-red-50 border border-red-100">
+                            <span className="text-[11px] font-semibold text-red-700">
+                              Delete?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                svcId && deleteServiceMutation.mutate(svcId)
+                              }
+                              disabled={deleteServiceMutation.isPending}
+                              className="px-2.5 py-1 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition cursor-pointer disabled:opacity-50"
+                            >
+                              {deleteServiceMutation.isPending
+                                ? "Deleting..."
+                                : "Yes"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingId(null)}
+                              className="px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-200/60 rounded-lg transition cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEdit(svc)}
+                              disabled={isCurrentEditing}
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
+                                isCurrentEditing
+                                  ? "bg-[#E2B4BD] text-white"
+                                  : "bg-neutral-100 hover:bg-neutral-200 text-neutral-700"
+                              }`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              {isCurrentEditing ? "Editing" : "Edit"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDeletingId(svcId || null)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700 transition cursor-pointer"
+                              title="Delete service"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
