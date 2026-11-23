@@ -43,23 +43,7 @@ export default function Hero() {
       <div className="relative z-10 w-full px-6 pb-14">
         <div className="max-w-xl flex flex-col gap-5 items-start text-left">
           {/* Site Logo */}
-          <a href="/" className="inline-block" aria-label="Cherrybrush |  Booking Service">
-            <img
-              src={imgSrc(logo)}
-              alt="Cherrybrush |  Booking Service"
-              className="h-16 w-auto rounded-sm block object-contain"
-            />
-          </a>
-
-          {/* Primary High-Ranking SEO Heading */}
-          <h1
-            className="text-3xl md:text-5xl font-bold tracking-tight text-[#222222]"
-            style={{
-              textShadow: "0 2px 4px rgba(0,0,0,0.08)",
-            }}
-          >
-            Nail Art Studio in Jaipur
-          </h1>
+          <h1 className="text-4xl text-[#222222]">Cherrybrush Studio</h1>
 
           <p
             className="text-base sm:text-lg max-w-lg text-[#333333] font-medium leading-relaxed"
@@ -67,11 +51,14 @@ export default function Hero() {
               textShadow: "0 1px 2px rgba(0,0,0,0.06)",
             }}
           >
-            Appointment booking & professional nail services in Jaipur, India.
-            Get custom nail art, gel extensions, and complete nail care.
+            Professional nail services in Jaipur, India.
+            <br /> Get custom nail art, gel extensions, and complete nail care.
           </p>
 
-          <Button className="w-full sm:w-64" onClick={() => (window.location.href = "/book")}>
+          <Button
+            className="w-full sm:w-64"
+            onClick={() => (window.location.href = "/book")}
+          >
             Book Appointment
           </Button>
         </div>
